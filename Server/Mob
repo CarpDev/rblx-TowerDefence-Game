@@ -1,0 +1,69 @@
+SVS = game:GetService("ServerStorage")
+local bindables = SVS:WaitForChild("Bindables")
+local baseHitEvent = bindables:WaitForChild("BaseHit")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+
+
+local mob = {}
+
+
+function mob.Move(mob, map)
+	local humanoid = mob:WaitForChild('Humanoid')
+	local waypoints = map.waypoints
+	
+	
+	for waypoint=1, #waypoints:GetChildren() do
+		mob.MovingTo.Value = waypoint
+		humanoid:MoveTo(waypoints[waypoint].Position)
+		humanoid.MoveToFinished:Wait()
+		
+	end
+	
+	mob:Destroy()
+	
+	baseHitEvent:Fire(humanoid.Health)
+end
+
+function mob.Spawn(name, quantity, map)
+	local mobExists = SVS.Mobs:FindFirstChild(name)
+	if mobExists then
+		for i=1, quantity do 
+			task.wait(0.5)
+			local newMob = mobExists:Clone()
+			newMob.HumanoidRootPart.CFrame = map.Start.CFrame
+			newMob.Parent = workspace.Mobs
+			
+			
+			local movingTo = Instance.new("IntValue")
+			movingTo.Name = "MovingTo"
+			movingTo.Parent = newMob
+			
+			for i, object in ipairs(newMob:GetDescendants()) do
+				if object:IsA("BasePart") then
+					object.CollisionGroup = "Mob"
+				end
+			end
+			
+			newMob.Humanoid.Died:Connect(function()
+				task.wait(0.5)
+				newMob:Destroy()
+			end)
+			
+			
+			coroutine.wrap(mob.Move)(newMob, map)
+
+		end
+	
+		
+	else
+		
+		warn("requested mob does not exist -",name)
+	end
+
+end
+
+
+
+return mob

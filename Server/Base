@@ -1,0 +1,43 @@
+local ServerStorage = game:GetService('ServerStorage')
+local bindables = ServerStorage:WaitForChild("Bindables")
+local baseHitEvent = bindables:WaitForChild("BaseHit")
+local gameOver =bindables:WaitForChild("GameOver")
+local StarterGui = game:GetService("StarterGui")
+local  info = workspace:WaitForChild("Info")
+local base = {}
+
+function base.Setup(map, health)
+	base.Model = map:WaitForChild("Base")
+	base.CurrentHealth = health
+	base.MaxHealth = health 
+	info.MaxBaseHealth.Value = base.MaxHealth
+
+	base.UpdateHealth()
+end
+
+function base.UpdateHealth(damage)
+	if damage then 
+		base.CurrentHealth -= damage
+		info.BaseHealth.Value -= damage
+	end
+
+	local gui = base.Model.HealthGui
+	local percent = base.CurrentHealth / base.MaxHealth
+
+	gui.CurrentHealth.Size = UDim2.new(math.max(percent, 0), 0, 0.5, 0)
+	
+	
+	if base.CurrentHealth <= 0 then
+		gui.TextLabel.Text = "Base: Destroyed"
+		gameOver:Fire()
+	else
+		gui.TextLabel.Text = "Base:" .. base.CurrentHealth .. "/" .. base.MaxHealth
+
+	end
+end
+
+baseHitEvent.Event:Connect(base.UpdateHealth)
+
+
+return base
+

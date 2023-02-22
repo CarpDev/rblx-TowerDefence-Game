@@ -1,0 +1,238 @@
+local tower = {}
+RS = game:GetService("ReplicatedStorage")
+SVS = game:GetService("ServerStorage")
+local events = RS:WaitForChild("Events")
+local towers = RS:WaitForChild("Towers")
+local towerAnimateEvent = events:WaitForChild('towerAnimate')
+local functions = RS:WaitForChild("Functions")
+local towerSpawnfunction = functions:WaitForChild("SpawnTower")
+local sellTower = functions:WaitForChild("sellTower")
+local requestTower = functions:WaitForChild("RequestTower")
+local changeModeFunction = functions:WaitForChild("changeTowerMode")
+local maxTowers = 10
+local map = workspace.villagehome
+local DefaultMode = "Near"
+
+function tower.FindTarget(newTower, range, mode)
+	local bestTarget = nil
+	local bestWP = nil
+	local bestDistance = nil
+	local bestHealth = nil
+	
+	for i, target in ipairs(workspace.Mobs:GetChildren()) do
+		local distanceToTarget = (target.HumanoidRootPart.Position - newTower.HumanoidRootPart.Position).Magnitude
+		local distanceToWP = (target.HumanoidRootPart.Position - map.waypoints[target.MovingTo.Value].Position).Magnitude
+		if distanceToTarget <= range then
+			if mode == "Near" then
+				range = distanceToTarget
+				bestTarget = target
+			elseif mode == "First" then
+				if not bestWP or target.MovingTo.Value >= bestWP then
+					if bestWP  then
+						bestDistance = nil
+					end
+					bestWP = target.MovingTo.Value
+					
+					if not bestDistance or distanceToWP < bestDistance then
+						bestDistance = distanceToWP
+						bestTarget = target
+						
+					end
+				end
+			elseif mode == "Last" then
+				if not bestWP or target.MovingTo.Value <= bestWP then
+					if bestWP  then
+						bestDistance = nil
+					end
+					bestWP = target.MovingTo.Value
+
+					if not bestDistance or distanceToWP > bestDistance then
+						bestDistance = distanceToWP
+						bestTarget = target	
+					end
+				end
+			elseif mode == "Strong" then
+				if not bestHealth or target.Humanoid.Health > bestHealth then
+					bestHealth = target.Humanoid.Health
+					bestTarget = target
+				end
+			elseif mode == "Weak" then
+				if not bestHealth or target.Humanoid.Health < bestHealth then
+					bestHealth = target.Humanoid.Health
+					bestTarget = target
+				end
+			end
+	end
+end
+	
+	return bestTarget
+end
+
+function tower.Attack(newTower, player)
+	local config = newTower.Config
+	local target = tower.FindTarget(newTower, config.Range.Value, config.TargetMode.Value)
+	
+	if target and target:WaitForChild("Humanoid") and target.Humanoid.Health > 0 then
+		local targetCFrame = CFrame.lookAt(newTower.HumanoidRootPart.Position, target.HumanoidRootPart.Position)
+		newTower.HumanoidRootPart.BodyGyro.CFrame = targetCFrame
+			
+		towerAnimateEvent:FireAllClients(newTower, "Attack")
+	
+		target.Humanoid:TakeDamage(config.Damage.Value)
+		
+		if config.Stun.Value then
+			local mobConfig = target.Config
+			target.Humanoid.WalkSpeed = mobConfig.SlowDown.Value
+			else
+		end
+		
+
+		if target.Humanoid.Health <= 0  then
+			player.Silver.Value += target.Humanoid.MaxHealth
+		end
+								
+		task.wait(config.Cooldown.Value)
+		
+	end
+	
+	task.wait(0.1)
+	
+	if newTower and newTower.Parent then
+		tower.Attack(newTower, player)
+	end
+end
+
+function tower.Sell(player, model)
+	if model and model:FindFirstChild("Config") then
+		if model.Config.Owner.Value == player.Name then
+			player.placedTowers.Value -= 1
+			player.Silver.Value += model.Config.Price.Value/2
+			model:Destroy()
+			print(model.Name .. " Sold")
+			return true	
+		end
+	end
+	
+	warn("Cannot sell tower")
+	return false
+end
+
+function tower.ChangeMode(player, model)
+	if model and model:FindFirstChild("Config").TargetMode then
+		local targetmode = model.Config.TargetMode
+		local modes = {"Near", "First", "Last", "Strong", "Weak"}
+		local modeIndex = table.find(modes, targetmode.Value)
+		
+		if modeIndex < #modes then
+			targetmode.Value = modes[modeIndex + 1]
+		else
+			targetmode.Value = modes[1]
+		end
+		return true
+		
+	else
+		return false
+	end	
+end
+
+changeModeFunction.OnServerInvoke = tower.ChangeMode
+
+sellTower.OnServerInvoke = tower.Sell
+
+function tower.Spawn(player, name, cframe, previous)
+	local allowedTooSpawn = tower.CheckSpawn(player, name, previous)
+	
+	local newTower
+	local previousMode = nil
+	if allowedTooSpawn then
+		
+		if previous then
+			previousMode = previous.Config.TargetMode.Value
+			previous:Destroy()
+			newTower = RS.Towers.Upgrades[name]:Clone()
+		else
+			newTower = RS.Towers[name]:Clone()
+			player.placedTowers.Value += 1
+		end
+		
+		local ownerValue = Instance.new("StringValue")
+		ownerValue.Name = "Owner"
+		ownerValue.Value = player.Name
+		ownerValue.Parent = newTower.Config
+		
+		local targetMode = Instance.new("StringValue")
+		targetMode.Name = "TargetMode"	
+		targetMode.Parent = newTower.Config
+		if previousMode then
+			targetMode.Value = previousMode
+		else
+			targetMode.Value = DefaultMode
+		end
+
+				
+		newTower.HumanoidRootPart.CFrame = cframe
+		newTower.Parent = workspace.Towers
+		newTower.HumanoidRootPart:SetNetworkOwner(nil)
+		
+		local BodyGyro = Instance.new("BodyGyro")
+		BodyGyro.D = 0
+		BodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+		BodyGyro.CFrame = newTower.HumanoidRootPart.CFrame
+		BodyGyro.Parent = newTower.HumanoidRootPart
+	
+		for i, object in ipairs(newTower:GetDescendants()) do
+			if object:IsA("BasePart") or object:IsA("MeshPart") or object:IsA("Part") then
+					object.CollisionGroup = "Tower"	
+				
+			end
+		end
+		
+		player.Silver.Value -= newTower.Config.Price.Value
+		
+		coroutine.wrap(tower.Attack)(newTower, player)
+		
+		
+		return newTower
+	else
+		warn("requested Tower does not exist -",name)
+		
+		return false
+	end
+end
+
+towerSpawnfunction.OnServerInvoke = tower.Spawn
+
+function tower.CheckSpawn(player, name, previous)
+	local towerExists = RS.Towers:FindFirstChild(name, true)
+	
+	if towerExists then
+		if towerExists.Config.Price.Value <= player.Silver.Value then
+			if previous or player.placedTowers.Value < maxTowers then
+				return true
+			else
+				warn('tower limit reached')
+				workspace.Info.Message.Value = "tower limit reached..."
+				wait(2)
+				workspace.Info.Message.Value = ""
+			end
+		else
+			warn('player cannot purchase tower')
+			workspace.Info.Message.Value = "cannot afford tower..."
+			wait(2)
+			workspace.Info.Message.Value = ""
+		end
+	else
+		warn('that tower does not exist')
+	end
+		
+	return false
+	
+end
+requestTower.OnServerInvoke = tower.CheckSpawn
+
+
+return tower
+
+
+	
+
