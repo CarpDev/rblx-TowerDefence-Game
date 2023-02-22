@@ -1,0 +1,26 @@
+local player = game:GetService("Players")
+	
+player.PlayerAdded:Connect(function(player)
+	
+	local Items = Instance.new("Folder")
+	Items.Parent = player
+	Items.Name = "Items"
+	
+	local money = Instance.new("IntValue")
+	money.Parent = player
+	money.Name = "Silver"
+	money.Value = 7000
+	local placedtowers = Instance.new("IntValue")
+	placedtowers.Parent = player
+	placedtowers.Name = "placedTowers"
+	placedtowers.Value = 0
+	
+	player.CharacterAdded:Connect(function(char)	
+	for i, object in ipairs(char:GetDescendants()) do
+		if object:IsA("BasePart") then
+			object.CollisionGroup = "Player"
+		end
+		end
+		
+	end)
+end)
